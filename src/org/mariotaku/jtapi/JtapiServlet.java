@@ -65,15 +65,15 @@ public class JtapiServlet extends HttpServlet implements Constants {
 				handleWelcomePage(req, resp);
 				return;
 			}
-			if ("dummy".equalsIgnoreCase(requestUri)) {
+			if ("/dummy".equalsIgnoreCase(requestUri)) {
 				resp.setContentLength(0);
 				resp.setStatus(200);
 				return;
 			}
 		}
-		final String twitter_domain = subDomain != null ? subDomain + ".twitter.com" : "api.twitter.com";
+		final String twitterHost = subDomain != null ? subDomain + "." + TWITTER_HOST : TWITTER_HOST;
 		final String queryParam = req.getQueryString();
-		final String requestUrlString = "https://" + twitter_domain + requestUri
+		final String requestUrlString = "https://" + twitterHost + requestUri
 				+ (queryParam != null ? "?" + queryParam : "");
 		final URL requestUrl = new URL(requestUrlString);
 		final String requestMethod = req.getMethod();
@@ -104,7 +104,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		final byte[] content = buffer.toByteArray();
 
 		if (requestUri.equals("/oauth/authorize")) {
-			resp.getOutputStream().write(modifyAuthorizePage(req, content));
+			resp.getOutputStream().write(modifyAuthorizePage(req, twitterHost, content));
 		} else {
 			resp.getOutputStream().write(content);
 		}
@@ -118,19 +118,19 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		final PrintWriter writer = resp.getWriter();
 		writer.println("JTAPI " + VERSION_NAME + " is running!");
 		writer.println("--------------------------------");
-		writer.println("Rest Base URL:		" + scheme + "://" + serverName + "/1.1/");
-		writer.println("OAuth Base URL: 	" + scheme + "://" + serverName + "/oauth/");
+		writer.println("Rest Base URL:		" + scheme + "://api." + serverName + "/1.1/");
+		writer.println("OAuth Base URL: 	" + scheme + "://api." + serverName + "/oauth/");
 		writer.println("--------------------------------");
 		writer.println("How to use with Twidere:");
 		writer.println("Enable \"Ignore SSL Error\", then set above URLs (It\'s better to use HTTPS.)");
 		writer.println("--------------------------------");
 	}
 
-	private static byte[] modifyAuthorizePage(final HttpServletRequest req, final byte[] content)
-			throws UnsupportedEncodingException {
+	private static byte[] modifyAuthorizePage(final HttpServletRequest req, final String twitterHost,
+			final byte[] content) throws UnsupportedEncodingException {
 		final String serverName = req.getServerName();
 		final String contentString = new String(content, "UTF-8");
-		final String replacedContentString = contentString.replace("api.twitter.com", serverName);
+		final String replacedContentString = contentString.replace(twitterHost, serverName);
 		return replacedContentString.getBytes("UTF-8");
 	}
 }
