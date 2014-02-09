@@ -7,6 +7,7 @@ public interface Constants {
 	public static final String TWITTER_HOST = "twitter.com";
 
 	public static final String KEY_OVERRIDE_APP_HOST = "OVERRIDE_APP_HOST";
+	public static final String KEY_FORCE_SSL = "FORCE_SSL";
 
 	public static final String KEYWORD_APPID = "[APPID]";
 

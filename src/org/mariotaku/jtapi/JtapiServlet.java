@@ -1,6 +1,5 @@
 package org.mariotaku.jtapi;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -64,7 +63,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 
 	private String getAppHost() {
 		final String appId = AppEngineAccessor.getAppIdWithoutPrefix();
-		final String overrideAppHost = System.getProperty(KEY_OVERRIDE_APP_HOST, DEFAULT_OVERRIDE_APP_HOST);
+		final String overrideAppHost = jtapiProperties.getProperty(KEY_OVERRIDE_APP_HOST, DEFAULT_OVERRIDE_APP_HOST);
 		if (appId != null) return overrideAppHost.replace(KEYWORD_APPID, appId);
 		return overrideAppHost;
 	}
@@ -90,7 +89,8 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		}
 		final String twitterHost = Utils.isEmpty(subDomain) ? TWITTER_HOST : subDomain + TWITTER_HOST;
 		final String queryParam = req.getQueryString();
-		final String requestScheme = isRequestHTTPS(req.getScheme()) ? "https" : "http";
+		final boolean forceSSL = Boolean.parseBoolean(jtapiProperties.getProperty(KEY_FORCE_SSL));
+		final String requestScheme = forceSSL || isRequestHTTPS(req.getScheme()) ? "https" : "http";
 		final String requestUrlString = requestScheme + "://" + twitterHost + requestUri
 				+ (queryParam != null ? "?" + queryParam : "");
 		final URL requestUrl = new URL(requestUrlString);
@@ -116,16 +116,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 				resp.addHeader(key, value);
 			}
 		}
-		final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-		copyStream(conn.getInputStream(), buffer);
-		buffer.flush();
-		final byte[] content = buffer.toByteArray();
-
-		if (requestUri.equals("/oauth/authorize")) {
-			resp.getOutputStream().write(modifyAuthorizePage(req, twitterHost, content));
-		} else {
-			resp.getOutputStream().write(content);
-		}
+		copyStream(conn.getInputStream(), resp.getOutputStream());
 	}
 
 	private void handleWelcomePage(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
@@ -148,6 +139,10 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		writer.println("How to use with Twidere:");
 		writer.println("Enable \"Ignore SSL Error\", then set above URLs (It\'s better to use HTTPS.)");
 		writer.println("--------------------------------");
+		for (final Object key : jtapiProperties.keySet()) {
+			writer.printf("%s: %s\n", key, jtapiProperties.get(key));
+		}
+		writer.println("--------------------------------");
 	}
 
 	private void handleWrongHostPage(final HttpServletRequest req, final HttpServletResponse resp, final String appHost)
@@ -156,6 +151,11 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		resp.setContentType("text/plain");
 		final PrintWriter writer = resp.getWriter();
 		writer.printf("Wrong host config! %s\n", appHost);
+		writer.println("--------------------------------");
+		for (final Object key : jtapiProperties.keySet()) {
+			writer.printf("%s: %s\n", key, jtapiProperties.get(key));
+		}
+		writer.println("--------------------------------");
 	}
 
 	private byte[] modifyAuthorizePage(final HttpServletRequest req, final String twitterHost, final byte[] content)
