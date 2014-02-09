@@ -11,14 +11,31 @@ import java.net.URL;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
+import java.util.Properties;
+import java.util.regex.Pattern;
 
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 @SuppressWarnings("serial")
 public class JtapiServlet extends HttpServlet implements Constants {
+
+	private final Properties jtapiProperties = new Properties();
+
+	@Override
+	public void init(final ServletConfig config) throws ServletException {
+		super.init(config);
+		try {
+			final InputStream inStream = getServletContext().getResourceAsStream("/WEB-INF/jtapi.properties");
+			if (inStream != null) {
+				jtapiProperties.load(inStream);
+			}
+		} catch (final IOException e) {
+		}
+	}
 
 	@Override
 	protected void doDelete(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
@@ -45,22 +62,22 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		handleRequest(req, resp);
 	}
 
-	private static void copyStream(final InputStream is, final OutputStream os) throws IOException {
-		final int buffer_size = 1024;
-		final byte[] bytes = new byte[buffer_size];
-		int count = is.read(bytes, 0, buffer_size);
-		while (count != -1) {
-			os.write(bytes, 0, count);
-			count = is.read(bytes, 0, buffer_size);
-		}
+	private String getAppHost() {
+		final String appId = AppEngineAccessor.getAppIdWithoutPrefix();
+		final String overrideAppHost = System.getProperty(KEY_OVERRIDE_APP_HOST, DEFAULT_OVERRIDE_APP_HOST);
+		if (appId != null) return overrideAppHost.replace(KEYWORD_APPID, appId);
+		return overrideAppHost;
 	}
 
-	private static void handleRequest(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
-		final String serverName = req.getServerName();
+	private void handleRequest(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
+		final String serverName = req.getServerName(), appHost = getAppHost();
 		final String requestUri = req.getRequestURI();
-		final Matcher subdomainMatcher = PATTERN_SUB_DOMAIN.matcher(serverName);
-		final String subDomain = subdomainMatcher.matches() ? subdomainMatcher.group(ID_SUB_DOMAIN) : null;
-		if (subDomain == null) {
+		final String subDomain = Utils.replaceLast(serverName, Pattern.quote(appHost), "");
+		if (!serverName.endsWith(appHost)) {
+			handleWrongHostPage(req, resp, appHost);
+			return;
+		}
+		if (Utils.isEmpty(subDomain)) {
 			if ("/".equalsIgnoreCase(requestUri)) {
 				handleWelcomePage(req, resp);
 				return;
@@ -71,9 +88,10 @@ public class JtapiServlet extends HttpServlet implements Constants {
 				return;
 			}
 		}
-		final String twitterHost = subDomain != null ? subDomain + "." + TWITTER_HOST : TWITTER_HOST;
+		final String twitterHost = Utils.isEmpty(subDomain) ? TWITTER_HOST : subDomain + TWITTER_HOST;
 		final String queryParam = req.getQueryString();
-		final String requestUrlString = "https://" + twitterHost + requestUri
+		final String requestScheme = isRequestHTTPS(req.getScheme()) ? "https" : "http";
+		final String requestUrlString = requestScheme + "://" + twitterHost + requestUri
 				+ (queryParam != null ? "?" + queryParam : "");
 		final URL requestUrl = new URL(requestUrlString);
 		final String requestMethod = req.getMethod();
@@ -110,27 +128,59 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		}
 	}
 
-	private static void handleWelcomePage(final HttpServletRequest req, final HttpServletResponse resp)
-			throws IOException {
-		final String serverName = req.getServerName();
+	private void handleWelcomePage(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
+		resp.setStatus(200);
 		resp.setContentType("text/plain");
+		final String serverName = req.getServerName();
 		final String scheme = req.getScheme();
+		final int port = req.getLocalPort();
 		final PrintWriter writer = resp.getWriter();
-		writer.println("JTAPI " + VERSION_NAME + " is running!");
+		writer.printf("JTAPI %s is running!\n", VERSION_NAME);
 		writer.println("--------------------------------");
-		writer.println("Rest Base URL:		" + scheme + "://api." + serverName + "/1.1/");
-		writer.println("OAuth Base URL: 	" + scheme + "://api." + serverName + "/oauth/");
+		if (isNormalPort(port)) {
+			writer.printf("Rest Base URL:\t\t%s://api.%s/1.1/\n", scheme, serverName);
+			writer.printf("OAuth Base URL:\t\t%s://api.%s/oauth/\n", scheme, serverName);
+		} else {
+			writer.printf("Rest Base URL:\t\t%s://api.%s:%d/1.1/\n", scheme, serverName, port);
+			writer.printf("OAuth Base URL:\t\t%s://api.%s:%d/oauth/\n", scheme, serverName, port);
+		}
 		writer.println("--------------------------------");
 		writer.println("How to use with Twidere:");
 		writer.println("Enable \"Ignore SSL Error\", then set above URLs (It\'s better to use HTTPS.)");
 		writer.println("--------------------------------");
 	}
 
-	private static byte[] modifyAuthorizePage(final HttpServletRequest req, final String twitterHost,
-			final byte[] content) throws UnsupportedEncodingException {
+	private void handleWrongHostPage(final HttpServletRequest req, final HttpServletResponse resp, final String appHost)
+			throws IOException {
+		resp.setStatus(500);
+		resp.setContentType("text/plain");
+		final PrintWriter writer = resp.getWriter();
+		writer.printf("Wrong host config! %s\n", appHost);
+	}
+
+	private byte[] modifyAuthorizePage(final HttpServletRequest req, final String twitterHost, final byte[] content)
+			throws UnsupportedEncodingException {
 		final String serverName = req.getServerName();
 		final String contentString = new String(content, "UTF-8");
 		final String replacedContentString = contentString.replace(twitterHost, serverName);
 		return replacedContentString.getBytes("UTF-8");
+	}
+
+	private static void copyStream(final InputStream is, final OutputStream os) throws IOException {
+		final int buffer_size = 1024;
+		final byte[] bytes = new byte[buffer_size];
+		int count = is.read(bytes, 0, buffer_size);
+		while (count != -1) {
+			os.write(bytes, 0, count);
+			count = is.read(bytes, 0, buffer_size);
+		}
+	}
+
+	private static boolean isNormalPort(final int port) {
+		return port == 0 || port == 80 || port == 443;
+	}
+
+	private static boolean isRequestHTTPS(final String scheme) {
+		return "https".equalsIgnoreCase(scheme);
 	}
 }
