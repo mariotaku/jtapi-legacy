@@ -6,10 +6,11 @@ public class AppEngineAccessor {
 
 	public static String getAppId() {
 		try {
-			return ApiProxy.getCurrentEnvironment().getAppId();
-		} catch (final Throwable t) {
+			Class.forName("com.google.apphosting.api.ApiProxy");
+		} catch (final ClassNotFoundException e) {
 			return null;
 		}
+		return AppEngineAccessorImpl.getAppId();
 	}
 
 	public static String getAppIdWithoutPrefix() {
@@ -19,4 +20,13 @@ public class AppEngineAccessor {
 		return appId;
 	}
 
+	private static class AppEngineAccessorImpl {
+		public static String getAppId() {
+			try {
+				return ApiProxy.getCurrentEnvironment().getAppId();
+			} catch (final Throwable t) {
+				return null;
+			}
+		}
+	}
 }
