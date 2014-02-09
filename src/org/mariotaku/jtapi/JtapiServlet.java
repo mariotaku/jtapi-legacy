@@ -63,7 +63,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 	}
 
 	private String getAppHost() {
-		final String appId = AppEngineAccessor.getAppId();
+		final String appId = AppEngineAccessor.getAppIdWithoutPrefix();
 		final String overrideAppHost = System.getProperty(KEY_OVERRIDE_APP_HOST, DEFAULT_OVERRIDE_APP_HOST);
 		if (appId != null) return overrideAppHost.replace(KEYWORD_APPID, appId);
 		return overrideAppHost;
