@@ -1,6 +1,6 @@
 package org.mariotaku.jtapi;
 
-import com.google.apphosting.api.ApiProxy;
+import java.lang.reflect.Method;
 
 public class AppEngineAccessor {
 
@@ -23,7 +23,12 @@ public class AppEngineAccessor {
 	private static class AppEngineAccessorImpl {
 		public static String getAppId() {
 			try {
-				return ApiProxy.getCurrentEnvironment().getAppId();
+				final Class<?> apiProxyClass = Class.forName("com.google.apphosting.api.ApiProxy");
+				final Method getCurrentEnvironment = apiProxyClass.getMethod("getCurrentEnvironment");
+				final Object environment = getCurrentEnvironment.invoke(null);
+				final Class<?> environmentClass = environment.getClass();
+				final Method getAppId = environmentClass.getMethod("getAppId");
+				return (String) getAppId.invoke(environment);
 			} catch (final Throwable t) {
 				return null;
 			}

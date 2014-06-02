@@ -2,9 +2,7 @@ package org.mariotaku.jtapi;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.io.PrintWriter;
-import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Enumeration;
@@ -90,7 +88,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		final String twitterHost = Utils.isEmpty(subDomain) ? TWITTER_HOST : subDomain + TWITTER_HOST;
 		final String queryParam = req.getQueryString();
 		final boolean forceSSL = Boolean.parseBoolean(jtapiProperties.getProperty(KEY_FORCE_SSL));
-		final String requestScheme = forceSSL || isRequestHTTPS(req.getScheme()) ? "https" : "http";
+		final String requestScheme = forceSSL || Utils.isRequestHTTPS(req.getScheme()) ? "https" : "http";
 		final String requestUrlString = requestScheme + "://" + twitterHost + requestUri
 				+ (queryParam != null ? "?" + queryParam : "");
 		final URL requestUrl = new URL(requestUrlString);
@@ -106,7 +104,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 			conn.addRequestProperty(headerName, req.getHeader(headerName));
 		}
 		if ("POST".equals(requestMethod) || "PUT".equals(requestMethod)) {
-			copyStream(req.getInputStream(), conn.getOutputStream());
+			Utils.copyStream(req.getInputStream(), conn.getOutputStream());
 		}
 		resp.setStatus(conn.getResponseCode());
 		resp.setContentType(conn.getContentType());
@@ -116,7 +114,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 				resp.addHeader(key, value);
 			}
 		}
-		copyStream(conn.getInputStream(), resp.getOutputStream());
+		Utils.copyStream(conn.getInputStream(), resp.getOutputStream());
 	}
 
 	private void handleWelcomePage(final HttpServletRequest req, final HttpServletResponse resp) throws IOException {
@@ -128,7 +126,7 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		final PrintWriter writer = resp.getWriter();
 		writer.printf("JTAPI %s is running!\n", VERSION_NAME);
 		writer.println("--------------------------------");
-		if (isNormalPort(port)) {
+		if (Utils.isNormalPort(port)) {
 			writer.printf("Rest Base URL:\t\t%s://api.%s/1.1/\n", scheme, serverName);
 			writer.printf("OAuth Base URL:\t\t%s://api.%s/oauth/\n", scheme, serverName);
 		} else {
@@ -156,31 +154,5 @@ public class JtapiServlet extends HttpServlet implements Constants {
 			writer.printf("%s: %s\n", key, jtapiProperties.get(key));
 		}
 		writer.println("--------------------------------");
-	}
-
-	private byte[] modifyAuthorizePage(final HttpServletRequest req, final String twitterHost, final byte[] content)
-			throws UnsupportedEncodingException {
-		final String serverName = req.getServerName();
-		final String contentString = new String(content, "UTF-8");
-		final String replacedContentString = contentString.replace(twitterHost, serverName);
-		return replacedContentString.getBytes("UTF-8");
-	}
-
-	private static void copyStream(final InputStream is, final OutputStream os) throws IOException {
-		final int buffer_size = 1024;
-		final byte[] bytes = new byte[buffer_size];
-		int count = is.read(bytes, 0, buffer_size);
-		while (count != -1) {
-			os.write(bytes, 0, count);
-			count = is.read(bytes, 0, buffer_size);
-		}
-	}
-
-	private static boolean isNormalPort(final int port) {
-		return port == 0 || port == 80 || port == 443;
-	}
-
-	private static boolean isRequestHTTPS(final String scheme) {
-		return "https".equalsIgnoreCase(scheme);
 	}
 }
