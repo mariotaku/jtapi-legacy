@@ -25,12 +25,8 @@ public class JtapiServlet extends HttpServlet implements Constants {
 	@Override
 	public void init(final ServletConfig config) throws ServletException {
 		super.init(config);
-		try {
-			final InputStream inStream = getServletContext().getResourceAsStream("/WEB-INF/jtapi.properties");
-			if (inStream != null) {
-				jtapiProperties.load(inStream);
-			}
-		} catch (final IOException e) {
+		if (!loadPropertiesFromServletResources(jtapiProperties)) {
+			loadPropertiesFromResource(jtapiProperties);
 		}
 	}
 
@@ -78,13 +74,23 @@ public class JtapiServlet extends HttpServlet implements Constants {
 			if ("/".equalsIgnoreCase(requestUri)) {
 				handleWelcomePage(req, resp);
 				return;
-			}
-			if ("/dummy".equalsIgnoreCase(requestUri)) {
+			} else if ("/dummy".equalsIgnoreCase(requestUri)) {
 				resp.setContentLength(0);
 				resp.setStatus(200);
 				return;
+			} else if (requestUri.startsWith("/domain.")) {
+				final String domainPart = requestUri.substring("/domain.".length(), requestUri.indexOf("/", 1));
+				final String realRequestUri = requestUri.substring(requestUri.indexOf("/", 1));
+				final String realSubDomain = Utils.isEmpty(domainPart) ? domainPart : (domainPart + ".");
+				handleTwitterRequest(req, resp, realSubDomain, realRequestUri);
 			}
+		} else {
+			handleTwitterRequest(req, resp, subDomain, requestUri);
 		}
+	}
+
+	private void handleTwitterRequest(final HttpServletRequest req, final HttpServletResponse resp,
+			final String subDomain, final String requestUri) throws IOException {
 		final String twitterHost = Utils.isEmpty(subDomain) ? TWITTER_HOST : subDomain + TWITTER_HOST;
 		final String queryParam = req.getQueryString();
 		final boolean forceSSL = Boolean.parseBoolean(jtapiProperties.getProperty(KEY_FORCE_SSL));
@@ -108,9 +114,15 @@ public class JtapiServlet extends HttpServlet implements Constants {
 		}
 		resp.setStatus(conn.getResponseCode());
 		resp.setContentType(conn.getContentType());
-		final Map<String, List<String>> api_headers = conn.getHeaderFields();
-		for (final String key : api_headers.keySet()) {
-			for (final String value : api_headers.get(key)) {
+		final Map<String, List<String>> apiHeaders = conn.getHeaderFields();
+		for (final String key : apiHeaders.keySet()) {
+			if (key == null) {
+				continue;
+			}
+			for (final String value : apiHeaders.get(key)) {
+				if (value == null) {
+					continue;
+				}
 				resp.addHeader(key, value);
 			}
 		}
@@ -154,5 +166,29 @@ public class JtapiServlet extends HttpServlet implements Constants {
 			writer.printf("%s: %s\n", key, jtapiProperties.get(key));
 		}
 		writer.println("--------------------------------");
+	}
+
+	private boolean loadPropertiesFromResource(final Properties props) {
+		try {
+			final InputStream inStream = getClass().getResourceAsStream("/config/jtapi.properties");
+			if (inStream != null) {
+				props.load(inStream);
+				return true;
+			}
+		} catch (final IOException e) {
+		}
+		return false;
+	}
+
+	private boolean loadPropertiesFromServletResources(final Properties props) {
+		try {
+			final InputStream inStream = getServletContext().getResourceAsStream("/WEB-INF/jtapi.properties");
+			if (inStream != null) {
+				props.load(inStream);
+				return true;
+			}
+		} catch (final IOException e) {
+		}
+		return false;
 	}
 }
