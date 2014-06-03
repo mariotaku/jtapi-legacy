@@ -4,5 +4,4 @@
 *.*~
 *~
 
-heroku_deploy
-openshift_deploy
+target/

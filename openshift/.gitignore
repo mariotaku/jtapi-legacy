@@ -3,6 +3,3 @@
 *.old
 *.*~
 *~
-
-heroku_deploy
-openshift_deploy
